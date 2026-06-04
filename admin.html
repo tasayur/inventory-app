@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>管理者設定 — RFE在庫管理</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--pri:#1565c0;--bg:#f4f6f9;--bdr:#e0e0e0;--sub:#757575;--grn:#2e7d32;--red:#c62828;--st:env(safe-area-inset-top,0px)}
+body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;font-size:15px;color:#212121}
+.hdr{background:var(--pri);color:#fff;padding:14px 16px;padding-top:calc(14px + var(--st));font-size:17px;font-weight:700}
+.wrap{padding:14px;max-width:480px;margin:0 auto}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+h2{font-size:13px;font-weight:700;color:var(--sub);margin-bottom:12px;text-transform:uppercase;letter-spacing:.4px}
+.fg{margin-bottom:12px}
+label{display:block;font-size:13px;font-weight:600;color:var(--sub);margin-bottom:5px}
+input,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--bdr);border-radius:10px;font-size:15px;font-family:inherit;background:#fff;color:#212121;transition:.15s}
+input:focus,textarea:focus{outline:none;border-color:var(--pri)}
+.btn{width:100%;padding:13px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:.15s;font-family:inherit}
+.btn:active{opacity:.8}
+.pri{background:var(--pri);color:#fff}
+small{color:var(--sub);font-size:12px;display:block;margin-top:4px}
+.msg{padding:10px 13px;border-radius:8px;font-size:13px;margin-top:10px;display:none}
+.ok{background:#e8f5e9;color:var(--grn)}
+.err{background:#ffebee;color:var(--red)}
+a{color:var(--pri)}
+.step{display:flex;gap:10px;margin-bottom:12px;padding:10px 12px;background:#f8f9fa;border-radius:8px;align-items:flex-start}
+.snum{background:var(--pri);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;margin-top:1px}
+.stxt{font-size:13px;line-height:1.6;flex:1}
+</style>
+</head>
+<body>
+<div class="hdr">⚙️ 管理者設定</div>
+<div class="wrap">
+
+<p style="margin:10px 0 14px;font-size:13px;color:var(--sub)">
+  <a href="index.html">‹ メインアプリへ戻る</a>
+</p>
+
+<!-- STEP 1: Supabase -->
+<div class="card">
+  <h2>① Supabase設定（データベース）</h2>
+  <div class="step"><div class="snum">1</div><div class="stxt"><a href="https://supabase.com" target="_blank">supabase.com</a> でアカウント作成（無料・クレカ不要）</div></div>
+  <div class="step"><div class="snum">2</div><div class="stxt">「New Project」でプロジェクト作成</div></div>
+  <div class="step"><div class="snum">3</div><div class="stxt">Project Settings → API → Project URLとanon keyをコピーして下に貼り付け</div></div>
+  <div class="fg">
+    <label>Project URL</label>
+    <input id="sb-url" type="url" placeholder="https://xxxxxxxxxx.supabase.co">
+  </div>
+  <div class="fg">
+    <label>anon public key</label>
+    <input id="sb-key" type="text" placeholder="eyJhbGci...">
+  </div>
+  <button class="btn pri" onclick="saveSupabase()">保存してテスト接続</button>
+  <div class="msg" id="sb-msg"></div>
+</div>
+
+<!-- STEP 2: EmailJS -->
+<div class="card">
+  <h2>② EmailJS設定（メール通知）</h2>
+  <div class="step"><div class="snum">1</div><div class="stxt"><a href="https://www.emailjs.com" target="_blank">emailjs.com</a> でアカウント作成（無料・200通/月）</div></div>
+  <div class="step"><div class="snum">2</div><div class="stxt">Email Services → Gmail や Outlook を連携</div></div>
+  <div class="step"><div class="snum">3</div><div class="stxt">Email Templates → 新規作成。件名: <code>{{subject}}</code>、本文: <code>{{operation}}：{{item_name}}\n{{qty_info}}\n担当：{{operator}}\n日時：{{datetime}}\n備考：{{notes}}</code></div></div>
+  <div class="step"><div class="snum">4</div><div class="stxt">Account → Public Key をコピー</div></div>
+  <div class="fg">
+    <label>Public Key</label>
+    <input id="ej-pub" placeholder="xxxxxxxxxxxxxxxxx">
+  </div>
+  <div class="fg">
+    <label>Service ID</label>
+    <input id="ej-svc" placeholder="service_xxxxxxx">
+  </div>
+  <div class="fg">
+    <label>Template ID</label>
+    <input id="ej-tpl" placeholder="template_xxxxxxx">
+  </div>
+  <div class="fg">
+    <label>通知先メール（カンマ区切りで複数可）</label>
+    <textarea id="emails" rows="2" placeholder="tasayur@amazon.co.jp, kttsuneo@amazon.co.jp"></textarea>
+  </div>
+  <button class="btn pri" onclick="saveEmailJS()">メール設定を保存</button>
+  <div class="msg" id="ej-msg"></div>
+</div>
+
+<!-- テスト送信 -->
+<div class="card">
+  <h2>③ テスト送信</h2>
+  <button class="btn pri" onclick="testEmail()">テストメールを送信</button>
+  <div class="msg" id="test-msg"></div>
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+// 保存済み値を復元
+document.getElementById('sb-url').value  = localStorage.getItem('sb_url')||'';
+document.getElementById('sb-key').value  = localStorage.getItem('sb_key')||'';
+document.getElementById('ej-pub').value  = localStorage.getItem('ej_pub')||'';
+document.getElementById('ej-svc').value  = localStorage.getItem('ej_svc')||'';
+document.getElementById('ej-tpl').value  = localStorage.getItem('ej_tpl')||'';
+document.getElementById('emails').value  = localStorage.getItem('notif_emails')||'';
+
+function msg(id, text, type) {
+  const el = document.getElementById(id);
+  el.textContent = text; el.className = 'msg ' + type; el.style.display='block';
+}
+
+async function saveSupabase() {
+  const url = document.getElementById('sb-url').value.trim().replace(/\/$/,'');
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url||!key) { msg('sb-msg','URLとKeyを入力してください','err'); return; }
+  try {
+    const client = supabase.createClient(url, key);
+    const {data,error} = await client.from('items').select('count').limit(1);
+    if (error) throw error;
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    msg('sb-msg','✓ 接続成功！保存しました','ok');
+  } catch(e) {
+    msg('sb-msg','⚠️ 接続失敗: '+e.message,'err');
+  }
+}
+
+function saveEmailJS() {
+  const pub  = document.getElementById('ej-pub').value.trim();
+  const svc  = document.getElementById('ej-svc').value.trim();
+  const tpl  = document.getElementById('ej-tpl').value.trim();
+  const mail = document.getElementById('emails').value.trim();
+  if (!pub||!svc||!tpl) { msg('ej-msg','3つすべて入力してください','err'); return; }
+  localStorage.setItem('ej_pub', pub);
+  localStorage.setItem('ej_svc', svc);
+  localStorage.setItem('ej_tpl', tpl);
+  localStorage.setItem('notif_emails', mail);
+  msg('ej-msg','✓ 保存しました','ok');
+}
+
+async function testEmail() {
+  const pub = localStorage.getItem('ej_pub');
+  const svc = localStorage.getItem('ej_svc');
+  const tpl = localStorage.getItem('ej_tpl');
+  const to  = localStorage.getItem('notif_emails');
+  if (!pub||!svc||!tpl) { msg('test-msg','先にEmailJS設定を保存してください','err'); return; }
+  emailjs.init(pub);
+  try {
+    await emailjs.send(svc, tpl, {
+      to_email: to,
+      operation: 'テスト',
+      item_name: 'テスト品目',
+      item_id: 'ITEM-000',
+      qty_info: '在庫テスト',
+      operator: 'システム管理者',
+      datetime: new Date().toLocaleString('ja-JP'),
+      notes: 'これはテストメールです',
+      subject: '【RFE装備品】テスト送信'
+    });
+    msg('test-msg','✓ テストメールを送信しました','ok');
+  } catch(e) {
+    msg('test-msg','⚠️ 送信失敗: '+JSON.stringify(e),'err');
+  }
+}
+</script>
+</body>
+</html>

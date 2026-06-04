@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>RFE装備品 在庫管理</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --pri:#1565c0;--pri-l:#e3f2fd;--acc:#ff8f00;
+  --grn:#2e7d32;--red:#c62828;--ylw:#f9a825;
+  --bg:#f4f6f9;--card:#fff;--txt:#212121;--sub:#757575;--bdr:#e0e0e0;
+  --sb:env(safe-area-inset-bottom,0px);--st:env(safe-area-inset-top,0px)
+}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;font-size:15px}
+#app{display:flex;flex-direction:column;height:100%;max-width:480px;margin:0 auto}
+.scr{display:none;flex-direction:column;flex:1;overflow:hidden}
+.scr.on{display:flex}
+/* header */
+.hdr{background:var(--pri);color:#fff;padding:12px 16px;padding-top:calc(12px + var(--st));display:flex;align-items:center;gap:10px;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.hdr h1{font-size:17px;font-weight:700;flex:1}
+.back{background:none;border:none;color:#fff;font-size:24px;cursor:pointer;padding:2px 6px;line-height:1}
+/* scroll */
+.body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px}
+/* nav */
+#nav{display:flex;background:#fff;border-top:1px solid var(--bdr);padding-bottom:calc(4px + var(--sb));flex-shrink:0}
+.nb{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 4px;background:none;border:none;cursor:pointer;font-size:10px;color:var(--sub);gap:3px}
+.nb span{font-size:22px;line-height:1}
+.nb.on{color:var(--pri)}
+/* cards/btns */
+.card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+.btn:active{opacity:.8;transform:scale(.98)}
+.pri{background:var(--pri);color:#fff}
+.out{background:#fff;border:2px solid var(--pri);color:var(--pri)}
+.scan-btn{background:var(--pri);color:#fff;padding:22px;font-size:18px;border-radius:16px;width:100%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;font-weight:700;font-family:inherit}
+/* op buttons */
+.ops{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.ob{padding:18px 8px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;transition:.15s;font-family:inherit}
+.ob:active{opacity:.8;transform:scale(.97)}
+.ob span{font-size:28px}
+.issue{background:#fff3e0;color:#e65100}
+.order{background:#e8f5e9;color:#2e7d32}
+.recv {background:#e3f2fd;color:#1565c0}
+.done {background:#f3e5f5;color:#6a1b9a}
+/* stock */
+.stkbox{display:flex;align-items:center;justify-content:space-between;padding:14px;background:var(--card);border-radius:12px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.snum{font-size:38px;font-weight:800;line-height:1}
+.snum.g{color:var(--grn)}.snum.y{color:var(--ylw)}.snum.r{color:var(--red)}
+/* form */
+.fg{margin-bottom:14px}
+.fg label{display:block;font-size:13px;font-weight:600;color:var(--sub);margin-bottom:6px}
+.fg input,.fg textarea{width:100%;padding:12px 14px;border:1.5px solid var(--bdr);border-radius:10px;font-size:16px;background:#fff;color:var(--txt);-webkit-appearance:none;font-family:inherit;transition:.15s}
+.fg input:focus,.fg textarea:focus{outline:none;border-color:var(--pri)}
+.qrow{display:flex;gap:10px;align-items:center}
+.qbtn{width:44px;height:44px;border:1.5px solid var(--bdr);border-radius:8px;background:#fff;font-size:22px;cursor:pointer;flex-shrink:0;font-family:inherit}
+.qinp{text-align:center;font-size:20px;font-weight:700;width:70px!important}
+/* list rows */
+.row{display:flex;align-items:center;gap:10px;padding:12px;background:var(--card);border-radius:10px;margin-bottom:6px;cursor:pointer;transition:.1s}
+.row:active{background:#f0f0f0}
+.rl{flex:1;min-width:0}
+.rn{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs{font-size:12px;color:var(--sub);margin-top:2px}
+.rq{font-size:20px;font-weight:800;min-width:38px;text-align:right}
+.rq.g{color:var(--grn)}.rq.y{color:var(--ylw)}.rq.r{color:var(--red)}
+/* history */
+.hr{padding:10px 12px;background:var(--card);border-radius:8px;margin-bottom:6px;border-left:4px solid #ccc}
+.hr.出庫{border-left-color:#e65100}
+.hr.入庫{border-left-color:var(--pri)}
+.hr.補充手配{border-left-color:var(--grn)}
+.hr.レシーブ完了{border-left-color:#6a1b9a}
+.ht{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+.hbadge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px}
+.hbadge.出庫{background:#fff3e0;color:#e65100}
+.hbadge.入庫{background:var(--pri-l);color:var(--pri)}
+.hbadge.補充手配{background:#e8f5e9;color:var(--grn)}
+.hbadge.レシーブ完了{background:#f3e5f5;color:#6a1b9a}
+/* filter */
+.chips{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;flex-shrink:0}
+.chips::-webkit-scrollbar{display:none}
+.chip{padding:6px 14px;border-radius:20px;border:1.5px solid var(--bdr);background:#fff;font-size:13px;white-space:nowrap;cursor:pointer;flex-shrink:0;font-family:inherit}
+.chip.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+/* misc */
+.sec{font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;margin:4px 0 10px;letter-spacing:.4px}
+.empty{text-align:center;padding:40px 20px;color:var(--sub)}
+.spin{width:32px;height:32px;border:3px solid var(--bdr);border-top-color:var(--pri);border-radius:50%;animation:sp .6s linear infinite;margin:20px auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+#toast{position:fixed;bottom:calc(80px + var(--sb));left:50%;transform:translateX(-50%) translateY(16px);background:#323232;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;opacity:0;transition:.3s;pointer-events:none;max-width:300px;text-align:center;z-index:999}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.warn{background:#fff3e0;border:1px solid #ffe0b2;border-radius:8px;padding:10px 12px;font-size:13px;color:#e65100;margin-bottom:10px}
+.idbadge{display:inline-block;font-size:10px;background:var(--pri-l);color:var(--pri);padding:2px 6px;border-radius:4px;font-weight:700;margin-top:4px}
+/* success */
+.sico{font-size:72px;text-align:center;margin:30px 0 14px}
+.stit{font-size:22px;font-weight:700;text-align:center;margin-bottom:6px}
+.ssub{text-align:center;color:var(--sub);margin-bottom:16px;font-size:14px}
+/* qr */
+#qr-r{width:100%;border-radius:12px;overflow:hidden}
+#qr-r video{width:100%!important}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- HOME -->
+<div id="s-home" class="scr on">
+  <div class="hdr"><span style="font-size:20px">📦</span><h1>RFE装備品 在庫管理</h1></div>
+  <div class="body">
+    <div id="cfg-warn" class="warn" style="display:none">⚠️ 設定が未完了です。<a href="admin.html" style="color:#e65100;font-weight:700">管理者設定</a>を開いてください。</div>
+    <button class="scan-btn" onclick="goScan()" style="margin-bottom:14px"><span>📷</span>QRコードをスキャン</button>
+    <div id="alerts"></div>
+    <div class="sec">📊 在庫サマリー</div>
+    <div id="summary"><div class="spin"></div></div>
+  </div>
+</div>
+
+<!-- SCAN -->
+<div id="s-scan" class="scr">
+  <div class="hdr"><button class="back" onclick="stopScan()">‹</button><h1>QRスキャン</h1></div>
+  <div class="body">
+    <p style="text-align:center;color:var(--sub);font-size:13px;margin-bottom:10px">装備品のQRコードにカメラを向ける</p>
+    <div id="qr-r"></div>
+    <div style="margin-top:14px">
+      <div class="sec">または品目を選択</div>
+      <div id="mlist"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ITEM -->
+<div id="s-item" class="scr">
+  <div class="hdr"><button class="back" onclick="go('scan')">‹</button><h1 id="itit">品目詳細</h1></div>
+  <div class="body">
+    <div class="stkbox">
+      <div>
+        <div id="iname" style="font-size:17px;font-weight:700"></div>
+        <div id="isize" style="font-size:13px;color:var(--sub);margin-top:2px"></div>
+        <div id="iid"></div>
+      </div>
+      <div style="text-align:right">
+        <div class="snum" id="iqty">—</div>
+        <div style="font-size:12px;color:var(--sub)">現在在庫</div>
+        <div id="istd" style="font-size:12px;color:var(--sub);margin-top:2px"></div>
+      </div>
+    </div>
+    <div class="sec">操作を選択</div>
+    <div class="ops">
+      <button class="ob issue" onclick="goForm('出庫')"><span>📤</span>出庫</button>
+      <button class="ob order" onclick="goForm('補充手配')"><span>🛒</span>補充手配</button>
+      <button class="ob recv"  onclick="goForm('入庫')"><span>📥</span>入庫</button>
+      <button class="ob done"  onclick="goForm('レシーブ完了')"><span>✅</span>レシーブ完了</button>
+    </div>
+    <div class="sec" style="margin-top:14px">📋 この品目の履歴</div>
+    <div id="ihistory"><div class="spin"></div></div>
+  </div>
+</div>
+
+<!-- FORM -->
+<div id="s-form" class="scr">
+  <div class="hdr"><button class="back" onclick="go('item')">‹</button><h1 id="ftit">操作</h1></div>
+  <div class="body">
+    <div class="card" id="fsummary" style="margin-bottom:12px"></div>
+    <div class="card">
+      <div class="fg"><label>担当者名 <span style="color:var(--red)">*</span></label>
+        <input id="fn" type="text" placeholder="例：谷口 さゆり" autocomplete="name"></div>
+      <div class="fg"><label>担当者ID <span style="color:var(--red)">*</span></label>
+        <input id="fi" type="text" placeholder="例：tasayur" autocomplete="off"></div>
+      <div class="fg" id="fqg"><label>数量</label>
+        <div class="qrow">
+          <button class="qbtn" onclick="dq(-1)">－</button>
+          <input id="fq" type="number" class="qinp" value="1" min="1" max="99">
+          <button class="qbtn" onclick="dq(1)">＋</button>
+        </div></div>
+      <div class="fg"><label>備考（任意）</label>
+        <textarea id="fnotes" rows="2" placeholder="特記事項があれば"></textarea></div>
+    </div>
+    <button class="btn pri" id="fsbtn" onclick="submit()">送信</button>
+  </div>
+</div>
+
+<!-- SUCCESS -->
+<div id="s-ok" class="scr">
+  <div class="hdr"><h1 id="oktit">完了</h1></div>
+  <div class="body" style="align-items:center;justify-content:center">
+    <div class="sico" id="okico">✅</div>
+    <div class="stit" id="okt">記録しました</div>
+    <div class="ssub">関係者にメールで通知しました</div>
+    <div class="card" id="okd" style="margin-bottom:14px;width:100%"></div>
+    <button class="btn pri" onclick="goScan()" style="width:100%">次の操作へ</button>
+    <div style="height:10px"></div>
+    <button class="btn out" onclick="nav('home')" style="width:100%">ホームへ</button>
+  </div>
+</div>
+
+<!-- INVENTORY -->
+<div id="s-inv" class="scr">
+  <div class="hdr"><span style="font-size:20px">📋</span><h1>在庫一覧</h1>
+    <button onclick="loadInv()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">↺</button></div>
+  <div style="background:#fff;padding:10px 12px;border-bottom:1px solid var(--bdr);flex-shrink:0">
+    <div class="chips" id="chips"></div></div>
+  <div class="body"><div id="invlist"><div class="spin"></div></div></div>
+</div>
+
+<!-- HISTORY -->
+<div id="s-hist" class="scr">
+  <div class="hdr"><span style="font-size:20px">📜</span><h1>操作履歴</h1></div>
+  <div class="body"><div id="histlist"><div class="spin"></div></div></div>
+</div>
+
+<nav id="nav">
+  <button class="nb on" id="nb-home" onclick="nav('home')"><span>🏠</span>ホーム</button>
+  <button class="nb" id="nb-scan" onclick="goScan()"><span>📷</span>スキャン</button>
+  <button class="nb" id="nb-inv"  onclick="nav('inv')"><span>📋</span>在庫</button>
+  <button class="nb" id="nb-hist" onclick="nav('hist')"><span>📜</span>履歴</button>
+</nav>
+<div id="toast"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  CONFIG（管理者画面で設定→localStorageに保存）
+// ══════════════════════════════════════════════
+const CFG = {
+  url:  localStorage.getItem('sb_url')  || '',
+  key:  localStorage.getItem('sb_key')  || '',
+  ejPub: localStorage.getItem('ej_pub') || '',
+  ejSvc: localStorage.getItem('ej_svc') || '',
+  ejTpl: localStorage.getItem('ej_tpl') || '',
+  emails: localStorage.getItem('notif_emails') || '',
+};
+
+let db = null;
+if (CFG.url && CFG.key) {
+  db = supabase.createClient(CFG.url, CFG.key);
+  if (CFG.ejPub) emailjs.init(CFG.ejPub);
+}
+
+let allItems = [], curItem = null, curOp = null, curCat = 'すべて';
+let qr = null;
+
+// ── 画面切り替え ──────────────────────────────
+function go(name) {
+  document.querySelectorAll('.scr').forEach(s => s.classList.remove('on'));
+  document.getElementById('s-' + name).classList.add('on');
+  ['home','inv','hist'].forEach(n =>
+    document.getElementById('nb-' + n)?.classList.toggle('on', n === name));
+}
+function nav(name) {
+  go(name);
+  if (name==='home') loadHome();
+  if (name==='inv')  loadInv();
+  if (name==='hist') loadHist();
+}
+
+// ── Toast ─────────────────────────────────────
+function toast(m, d=2800) {
+  const t = document.getElementById('toast');
+  t.textContent = m; t.classList.add('on');
+  setTimeout(() => t.classList.remove('on'), d);
+}
+
+// ── 色クラス ──────────────────────────────────
+function qcls(q, s) {
+  if (q == null) return '';
+  if (q === 0) return 'r';
+  if (s && q < s) return 'y';
+  return 'g';
+}
+
+// ── HOME ──────────────────────────────────────
+async function loadHome() {
+  if (!db) { document.getElementById('cfg-warn').style.display='block'; return; }
+  try {
+    const {data,error} = await db.from('items').select('*').order('item_id');
+    if (error) throw error;
+    allItems = data;
+    renderSummary(data);
+    renderAlerts(data);
+  } catch(e) {
+    document.getElementById('summary').innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
+  }
+}
+
+function renderSummary(items) {
+  const z = items.filter(i => i.current_qty===0).length;
+  const l = items.filter(i => i.current_qty>0 && i.standard_qty && i.current_qty<i.standard_qty).length;
+  const g = items.length - z - l;
+  document.getElementById('summary').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="card" style="text-align:center;padding:14px 6px">
+        <div style="font-size:28px;font-weight:800;color:var(--grn)">${g}</div>
+        <div style="font-size:11px;color:var(--sub)">適正在庫</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px 6px">
+        <div style="font-size:28px;font-weight:800;color:var(--ylw)">${l}</div>
+        <div style="font-size:11px;color:var(--sub)">定数以下</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px 6px">
+        <div style="font-size:28px;font-weight:800;color:var(--red)">${z}</div>
+        <div style="font-size:11px;color:var(--sub)">在庫ゼロ</div>
+      </div>
+    </div>`;
+}
+
+function renderAlerts(items) {
+  const a = items.filter(i => i.current_qty===0 || (i.standard_qty && i.current_qty<i.standard_qty));
+  const el = document.getElementById('alerts');
+  if (!a.length) { el.innerHTML=''; return; }
+  el.innerHTML = `<div class="sec" style="color:var(--red)">⚠️ 要注意（${a.length}件）</div>` +
+    a.slice(0,5).map(i => itemRow(i)).join('');
+}
+
+// ── SCAN ──────────────────────────────────────
+function goScan() {
+  go('scan');
+  if (!allItems.length) loadItems4scan();
+  else renderMlist(allItems);
+  setTimeout(startQR, 300);
+}
+
+async function loadItems4scan() {
+  if (!db) return;
+  const {data} = await db.from('items').select('*').order('item_id');
+  if (data) { allItems = data; renderMlist(data); }
+}
+
+function renderMlist(items) {
+  document.getElementById('mlist').innerHTML = items.map(i => itemRow(i)).join('');
+}
+
+function startQR() {
+  if (qr) return;
+  qr = new Html5Qrcode('qr-r');
+  qr.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},
+    text => {
+      qr.stop().then(()=>qr=null);
+      const id = text.trim();
+      if (id.startsWith('ITEM-')) selectItem(id);
+      else toast('⚠️ RFE装備品のQRコードではありません');
+    }, ()=>{}
+  ).catch(e => {
+    document.getElementById('qr-r').innerHTML =
+      `<div class="empty">📷 カメラを起動できません<br><small>${e}</small></div>`;
+  });
+}
+
+function stopScan() {
+  if (qr) { qr.stop().catch(()=>{}); qr=null; }
+  go('home');
+}
+
+// ── ITEM DETAIL ───────────────────────────────
+async function selectItem(id) {
+  if (qr) { qr.stop().catch(()=>{}); qr=null; }
+  let item = allItems.find(i => i.item_id===id);
+  if (!item && db) {
+    const {data} = await db.from('items').select('*').eq('item_id',id).single();
+    if (!data) { toast('品目が見つかりません: '+id); return; }
+    item = data;
+  }
+  curItem = item;
+  renderItem(item);
+  loadIHistory(id);
+  go('item');
+}
+
+function renderItem(i) {
+  const q = i.current_qty, s = i.standard_qty;
+  document.getElementById('itit').textContent = i.name;
+  document.getElementById('iname').textContent = i.name;
+  document.getElementById('isize').textContent = i.size&&i.size!=='-'?'サイズ: '+i.size:(i.category||'');
+  document.getElementById('iid').innerHTML = `<span class="idbadge">${i.item_id}</span>`;
+  const qel = document.getElementById('iqty');
+  qel.textContent = q; qel.className = 'snum ' + qcls(q,s);
+  document.getElementById('istd').textContent = s?'定数: '+s:'';
+}
+
+async function loadIHistory(id) {
+  const el = document.getElementById('ihistory');
+  if (!db) { el.innerHTML=''; return; }
+  const {data} = await db.from('history').select('*').eq('item_id',id)
+    .order('timestamp',{ascending:false}).limit(10);
+  el.innerHTML = data?.length ? data.map(histRow).join('') : '<div class="empty">履歴なし</div>';
+}
+
+// ── FORM ──────────────────────────────────────
+function goForm(op) {
+  curOp = op;
+  const i = curItem, q = i.current_qty;
+  const lbl = i.name + (i.size&&i.size!=='-'?' ('+i.size+')':'');
+  document.getElementById('ftit').textContent = op;
+  document.getElementById('fsbtn').textContent = op+'を送信';
+  document.getElementById('fsummary').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-weight:700">${lbl}</div>
+        <div style="font-size:12px;color:var(--sub);margin-top:2px">${i.item_id}</div></div>
+      <div style="text-align:right">
+        <div style="font-size:26px;font-weight:800;color:var(--${q===0?'red':i.standard_qty&&q<i.standard_qty?'ylw':'grn'})">${q}</div>
+        <div style="font-size:11px;color:var(--sub)">現在在庫</div>
+      </div>
+    </div>`;
+  document.getElementById('fqg').style.display = ['出庫','入庫'].includes(op)?'':'none';
+  document.getElementById('fq').value = 1;
+  document.getElementById('fn').value = localStorage.getItem('op_name')||'';
+  document.getElementById('fi').value = localStorage.getItem('op_id')||'';
+  document.getElementById('fnotes').value = '';
+  go('form');
+}
+
+function dq(d) {
+  const el = document.getElementById('fq');
+  el.value = Math.max(1, Math.min(99, parseInt(el.value||1)+d));
+}
+
+async function submit() {
+  const name = document.getElementById('fn').value.trim();
+  const oid  = document.getElementById('fi').value.trim();
+  const qty  = parseInt(document.getElementById('fq').value)||1;
+  const notes= document.getElementById('fnotes').value.trim();
+  if (!name) { toast('担当者名を入力してください'); return; }
+  if (!oid)  { toast('担当者IDを入力してください'); return; }
+
+  localStorage.setItem('op_name', name);
+  localStorage.setItem('op_id',   oid);
+
+  const btn = document.getElementById('fsbtn');
+  btn.textContent='送信中…'; btn.disabled=true;
+
+  try {
+    const item = curItem;
+    const prevQty = item.current_qty;
+    let newQty = prevQty;
+
+    if (!db) throw new Error('DB未接続。管理者設定を確認してください');
+
+    // 在庫更新
+    if (curOp==='出庫') {
+      if (prevQty < qty) throw new Error(`在庫不足（現在${prevQty}個）`);
+      newQty = prevQty - qty;
+      const {error} = await db.from('items').update({current_qty:newQty,updated_at:new Date()}).eq('item_id',item.item_id);
+      if (error) throw error;
+    } else if (curOp==='入庫') {
+      newQty = prevQty + qty;
+      const {error} = await db.from('items').update({current_qty:newQty,updated_at:new Date()}).eq('item_id',item.item_id);
+      if (error) throw error;
+    } else {
+      await db.from('items').update({updated_at:new Date()}).eq('item_id',item.item_id);
+    }
+
+    // 履歴保存
+    await db.from('history').insert({
+      item_id:item.item_id, item_name:item.name, item_size:item.size||'-',
+      operation_type:curOp, quantity:qty,
+      previous_qty:prevQty, new_qty:newQty,
+      operator_name:name, operator_id:oid, notes
+    });
+
+    // キャッシュ更新
+    const idx = allItems.findIndex(i=>i.item_id===item.item_id);
+    if (idx>=0) allItems[idx].current_qty = newQty;
+    curItem.current_qty = newQty;
+
+    // メール送信
+    sendEmail(item, curOp, qty, name, oid, prevQty, newQty, notes);
+
+    showOK(item, curOp, qty, newQty);
+  } catch(e) {
+    toast('⚠️ '+e.message, 4000);
+  } finally {
+    btn.textContent = curOp+'を送信'; btn.disabled=false;
+  }
+}
+
+function showOK(item, op, qty, newQty) {
+  const lbl = item.name+(item.size&&item.size!=='-'?' ('+item.size+')':'');
+  const icons = {'出庫':'📤','補充手配':'🛒','入庫':'📥','レシーブ完了':'✅'};
+  document.getElementById('okico').textContent = icons[op]||'✅';
+  document.getElementById('oktit').textContent = op+'完了';
+  document.getElementById('okt').textContent = op+'を記録しました';
+  const qline = ['出庫','入庫'].includes(op)
+    ? `<div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr)">
+         <span style="color:var(--sub)">新しい在庫数</span>
+         <span style="font-size:22px;font-weight:800">${newQty}個</span></div>` : '';
+  document.getElementById('okd').innerHTML = `<div style="font-weight:700">${lbl}</div>${qline}`;
+  go('ok');
+}
+
+// ── EMAIL（EmailJS） ───────────────────────────
+function sendEmail(item, op, qty, name, oid, prevQty, newQty, notes) {
+  if (!CFG.ejSvc || !CFG.ejTpl) return;
+  const lbl = item.name+(item.size&&item.size!=='-'?' ('+item.size+')':'');
+  const now = new Date().toLocaleString('ja-JP');
+  const qinfo = ['出庫','入庫'].includes(op)
+    ? `処理数量: ${qty}個 → 在庫: ${prevQty}→${newQty}個` : '';
+  emailjs.send(CFG.ejSvc, CFG.ejTpl, {
+    to_email: CFG.emails,
+    operation: op,
+    item_name: lbl,
+    item_id:   item.item_id,
+    qty_info:  qinfo,
+    operator:  `${name}（${oid}）`,
+    datetime:  now,
+    notes:     notes||'なし',
+    subject:   `【RFE装備品】${op}: ${lbl}`
+  }).catch(e => console.log('EmailJS error:', e));
+}
+
+// ── INVENTORY ─────────────────────────────────
+async function loadInv() {
+  if (!db) { document.getElementById('invlist').innerHTML='<div class="empty">設定未完了</div>'; return; }
+  const {data} = await db.from('items').select('*').order('item_id');
+  if (data) { allItems=data; renderChips(data); renderInvList(data, curCat); }
+}
+
+function renderChips(items) {
+  const cats = ['すべて',...new Set(items.map(i=>i.category).filter(Boolean))];
+  document.getElementById('chips').innerHTML = cats.map(c=>
+    `<button class="chip${curCat===c?' on':''}" onclick="setCat('${c}')">${c}</button>`
+  ).join('');
+}
+
+function setCat(c) {
+  curCat=c; renderChips(allItems); renderInvList(allItems,c);
+}
+
+function renderInvList(items, cat) {
+  const f = cat==='すべて' ? items : items.filter(i=>i.category===cat);
+  document.getElementById('invlist').innerHTML = f.length ? f.map(itemRow).join('') : '<div class="empty">品目なし</div>';
+}
+
+// ── HISTORY ───────────────────────────────────
+async function loadHist() {
+  if (!db) { document.getElementById('histlist').innerHTML='<div class="empty">設定未完了</div>'; return; }
+  const {data} = await db.from('history').select('*').order('timestamp',{ascending:false}).limit(50);
+  document.getElementById('histlist').innerHTML = data?.length ? data.map(histRow).join('') : '<div class="empty">履歴なし</div>';
+}
+
+// ── RENDER HELPERS ────────────────────────────
+function itemRow(i) {
+  const q=i.current_qty, s=i.standard_qty;
+  const lbl = i.name+(i.size&&i.size!=='-'?' '+i.size:'');
+  return `<div class="row" onclick="selectItem('${i.item_id}')">
+    <div class="rl">
+      <div class="rn">${lbl}</div>
+      <div class="rs">${i.item_id}${s?' / 定数'+s:''}</div>
+    </div>
+    <div class="rq ${qcls(q,s)}">${q}</div>
+  </div>`;
+}
+
+function histRow(r) {
+  const lbl = r.item_name+(r.item_size&&r.item_size!=='-'?' ('+r.item_size+')':'');
+  const ts = r.timestamp ? new Date(r.timestamp).toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+  const qinfo = ['出庫','入庫'].includes(r.operation_type)
+    ? `<span style="font-size:12px;color:var(--sub);margin-left:4px">${r.previous_qty}→${r.new_qty}個</span>`:''
+  return `<div class="hr ${r.operation_type}">
+    <div class="ht">
+      <span class="hbadge ${r.operation_type}">${r.operation_type}</span>${qinfo}
+      <span style="font-size:11px;color:var(--sub)">${ts}</span>
+    </div>
+    <div style="font-size:13px;font-weight:600;margin:2px 0">${lbl}</div>
+    <div style="font-size:11px;color:var(--sub)">${r.operator_name}（${r.operator_id}）${r.notes?' — '+r.notes:''}</div>
+  </div>`;
+}
+
+// ── INIT ──────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  if (!CFG.url||!CFG.key) document.getElementById('cfg-warn').style.display='block';
+  loadHome();
+});
+</script>
+</body>
+</html>
