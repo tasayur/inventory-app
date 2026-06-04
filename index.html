@@ -232,6 +232,20 @@ const CFG = {
   emails: localStorage.getItem('notif_emails') || '',
 };
 
+// URL経由で設定を引き継ぐ（iPhoneセットアップ用）
+const _sp = new URLSearchParams(location.search);
+if (_sp.has('setup')) {
+  try {
+    const [_u, _k] = atob(_sp.get('setup')).split('|');
+    if (_u && _k) {
+      localStorage.setItem('sb_url', _u);
+      localStorage.setItem('sb_key', _k);
+      CFG.url = _u; CFG.key = _k;
+    }
+  } catch(e) {}
+  history.replaceState(null,'',location.pathname);
+}
+
 let db = null;
 if (CFG.url && CFG.key) {
   db = supabase.createClient(CFG.url, CFG.key);

@@ -53,6 +53,12 @@ a{color:var(--pri)}
   </div>
   <button class="btn pri" onclick="saveSupabase()">保存してテスト接続</button>
   <div class="msg" id="sb-msg"></div>
+  <div id="transfer-section" style="display:none;margin-top:14px">
+    <p style="font-size:13px;color:#555;margin-bottom:8px">📱 iPhoneでこのQRコードを読み取ると、設定が自動で引き継がれます：</p>
+    <div id="transfer-qr" style="display:flex;justify-content:center;margin:10px 0"></div>
+    <p style="font-size:11px;color:#888;text-align:center">スキャン後、メインアプリが開きます</p>
+  </div>
+  <button type="button" onclick="showTransferQR()" id="transfer-btn" style="display:none;width:100%;margin-top:10px;padding:12px;background:#fff;border:2px solid #1565c0;color:#1565c0;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📱 iPhoneに設定を転送（QRコード）</button>
 </div>
 
 <!-- STEP 2: EmailJS -->
@@ -118,6 +124,8 @@ async function saveSupabase() {
     localStorage.setItem('sb_url', url);
     localStorage.setItem('sb_key', key);
     msg('sb-msg','✓ 接続成功！保存しました','ok');
+    document.getElementById('transfer-btn').style.display = 'block';
+    document.getElementById('transfer-section').style.display = 'none';
   } catch(e) {
     msg('sb-msg','⚠️ 接続失敗: '+e.message,'err');
   }
@@ -159,6 +167,20 @@ async function testEmail() {
   } catch(e) {
     msg('test-msg','⚠️ 送信失敗: '+JSON.stringify(e),'err');
   }
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+function showTransferQR() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) { alert('先に保存してテスト接続を完了してください'); return; }
+  const setupUrl = 'https://tasayur.github.io/inventory-app/?setup=' + btoa(url + '|' + key);
+  const container = document.getElementById('transfer-qr');
+  container.innerHTML = '';
+  new QRCode(container, { text: setupUrl, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+  document.getElementById('transfer-section').style.display = 'block';
+  document.getElementById('transfer-btn').style.display = 'none';
 }
 </script>
 </body>
