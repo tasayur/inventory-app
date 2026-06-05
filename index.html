@@ -121,11 +121,47 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:-apple-s
 <div id="s-scan" class="scr">
   <div class="hdr"><button class="back" onclick="stopScan()">‹</button><h1>QRスキャン</h1></div>
   <div class="body">
-    <p style="text-align:center;color:var(--sub);font-size:13px;margin-bottom:10px">装備品のQRコードにカメラを向ける</p>
-    <div id="qr-r"></div>
-    <div style="margin-top:14px">
-      <div class="sec">または品目を選択</div>
-      <div id="mlist"></div>
+    <!-- カメラビュー -->
+    <div id="qr-wrap">
+      <p style="text-align:center;color:var(--sub);font-size:13px;margin-bottom:10px">装備品のQRコードにカメラを向ける</p>
+      <div id="qr-r"></div>
+      <div style="margin-top:14px">
+        <div class="sec" style="font-size:12px">または品目を選択</div>
+        <div id="mlist"></div>
+      </div>
+    </div>
+    <!-- スキャン後クイックフォーム（スキャン成功時に表示） -->
+    <div id="qf-wrap" style="display:none">
+      <div class="card" style="margin-bottom:10px">
+        <div id="qf-name" style="font-size:18px;font-weight:700"></div>
+        <div id="qf-size" style="font-size:13px;color:var(--sub);margin-top:2px"></div>
+        <div id="qf-qty-info" style="font-size:12px;color:var(--sub);margin-top:4px"></div>
+      </div>
+      <div class="card">
+        <div class="sec" style="margin-bottom:8px">操作</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+          <button id="qfb-issue" class="ob issue" onclick="qfSetOp('出庫')" style="padding:14px 8px"><span>📤</span>出庫</button>
+          <button id="qfb-return" class="ob recv" onclick="qfSetOp('返却')" style="padding:14px 8px"><span>📥</span>返却</button>
+          <button id="qfb-order" class="ob order" onclick="qfSetOp('補充手配')" style="padding:14px 8px"><span>🛒</span>補充手配</button>
+          <button id="qfb-recv" class="ob done" onclick="qfSetOp('入庫')" style="padding:14px 8px"><span>✅</span>入庫</button>
+        </div>
+        <div class="fg"><label>担当者名 <span style="color:var(--red)">*</span></label>
+          <input id="qf-fname" type="text" placeholder="例：谷口 さゆり" autocomplete="name"></div>
+        <div class="fg"><label>担当者ID <span style="color:var(--red)">*</span></label>
+          <input id="qf-fid" type="text" placeholder="例：tasayur" autocomplete="off"></div>
+        <div class="fg" id="qf-qtygrp">
+          <label>数量</label>
+          <div class="qrow">
+            <button class="qbtn" onclick="qfDq(-1)">－</button>
+            <input id="qf-qty" type="number" class="qinp" value="1" min="1" max="99">
+            <button class="qbtn" onclick="qfDq(1)">＋</button>
+          </div>
+        </div>
+        <div class="fg"><label>備考（任意）</label>
+          <textarea id="qf-notes" rows="2" placeholder="特記事項があれば"></textarea></div>
+        <button class="btn pri" id="qf-submit" onclick="qfSubmit()" style="margin-top:6px">送信</button>
+        <button class="btn out" onclick="qfCancel()" style="margin-top:8px">← 別の品目をスキャン</button>
+      </div>
     </div>
   </div>
 </div>
@@ -347,18 +383,126 @@ function renderMlist(items) {
 
 function startQR() {
   if (qr) return;
+  document.getElementById('qr-wrap').style.display = 'block';
+  document.getElementById('qf-wrap').style.display = 'none';
   qr = new Html5Qrcode('qr-r');
   qr.start({facingMode:'environment'},{fps:10,qrbox:{width:220,height:220}},
     text => {
       qr.stop().then(()=>qr=null);
       const id = text.trim();
-      if (id.startsWith('ITEM-')) selectItem(id);
+      if (id.startsWith('ITEM-')) showQuickForm(id);
       else toast('⚠️ RFE装備品のQRコードではありません');
     }, ()=>{}
   ).catch(e => {
     document.getElementById('qr-r').innerHTML =
       `<div class="empty">📷 カメラを起動できません<br><small>${e}</small></div>`;
   });
+}
+
+// スキャン成功 → クイックフォーム表示
+let qfItem = null;
+let qfOp = '出庫';
+
+async function showQuickForm(id) {
+  let item = allItems.find(i => i.item_id === id);
+  if (!item && db) {
+    const {data} = await db.from('items').select('*').eq('item_id', id).single();
+    if (!data) { toast('品目が見つかりません: ' + id); return; }
+    item = data;
+  }
+  if (!item) { toast('品目が見つかりません: ' + id); return; }
+  qfItem = item;
+  qfOp = '出庫';
+
+  document.getElementById('qf-name').textContent = item.name;
+  document.getElementById('qf-size').textContent = item.size !== '-' ? 'サイズ: ' + item.size : '';
+  const q = item.current_qty, s = item.standard_qty;
+  document.getElementById('qf-qty-info').textContent =
+    '現在庫: ' + q + (s ? ' / 定数: ' + s : '');
+  document.getElementById('qf-qty').value = 1;
+  document.getElementById('qf-notes').value = '';
+
+  // 担当者名・IDを前回から復元
+  const prevName = localStorage.getItem('op_name') || '';
+  const prevId   = localStorage.getItem('op_id')   || '';
+  document.getElementById('qf-fname').value = prevName;
+  document.getElementById('qf-fid').value   = prevId;
+
+  // ボタンリセット
+  ['qfb-issue','qfb-return','qfb-order','qfb-recv'].forEach(id => {
+    document.getElementById(id).style.opacity = '0.5';
+  });
+  document.getElementById('qfb-issue').style.opacity = '1';
+
+  document.getElementById('qr-wrap').style.display = 'none';
+  document.getElementById('qf-wrap').style.display = 'block';
+}
+
+function qfSetOp(op) {
+  qfOp = op;
+  const map = {'出庫':'qfb-issue','返却':'qfb-return','補充手配':'qfb-order','入庫':'qfb-recv'};
+  ['qfb-issue','qfb-return','qfb-order','qfb-recv'].forEach(id => {
+    document.getElementById(id).style.opacity = '0.5';
+  });
+  if (map[op]) document.getElementById(map[op]).style.opacity = '1';
+}
+
+function qfDq(d) {
+  const el = document.getElementById('qf-qty');
+  el.value = Math.max(1, Math.min(99, parseInt(el.value||1) + d));
+}
+
+function qfCancel() {
+  document.getElementById('qf-wrap').style.display = 'none';
+  document.getElementById('qr-wrap').style.display = 'block';
+  document.getElementById('qr-r').innerHTML = '';
+  qr = null;
+  setTimeout(startQR, 300);
+}
+
+async function qfSubmit() {
+  const name  = document.getElementById('qf-fname').value.trim();
+  const opId  = document.getElementById('qf-fid').value.trim();
+  const qty   = parseInt(document.getElementById('qf-qty').value) || 1;
+  const notes = document.getElementById('qf-notes').value.trim();
+  if (!name) { toast('担当者名を入力してください'); return; }
+
+  const btn = document.getElementById('qf-submit');
+  btn.disabled = true; btn.textContent = '送信中…';
+
+  try {
+    const prevQty = qfItem.current_qty;
+    let newQty = prevQty;
+    if (qfOp === '出庫') newQty = Math.max(0, prevQty - qty);
+    else if (qfOp === '返却' || qfOp === '入庫') newQty = prevQty + qty;
+
+    // 在庫更新
+    if (db) {
+      await db.from('items').update({current_qty: newQty, updated_at: new Date().toISOString()})
+        .eq('item_id', qfItem.item_id);
+      await db.from('history').insert({
+        item_id: qfItem.item_id, item_name: qfItem.name, item_size: qfItem.size,
+        operation_type: qfOp, quantity: qty,
+        previous_qty: prevQty, new_qty: newQty,
+        operator_name: name, operator_id: opId, notes: notes
+      });
+    }
+
+    // 担当者情報を記憶
+    localStorage.setItem('op_name', name);
+    localStorage.setItem('op_id', opId);
+
+    // 在庫キャッシュ更新
+    const idx = allItems.findIndex(i => i.item_id === qfItem.item_id);
+    if (idx >= 0) allItems[idx].current_qty = newQty;
+
+    toast('✅ ' + qfOp + '完了: ' + qfItem.name + ' (' + qty + '点)');
+    qfCancel(); // カメラ再起動
+  } catch(e) {
+    toast('⚠️ エラー: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '送信';
+  }
 }
 
 function stopScan() {
